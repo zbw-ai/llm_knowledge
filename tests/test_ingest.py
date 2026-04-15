@@ -24,6 +24,10 @@ def test_ingest_local_file_creates_source_note_and_registry(tmp_path: Path) -> N
     assert result.source_copy_path.exists()
     assert result.entry_id.startswith("paper-")
     assert result.entry_id.endswith("a-demo-paper")
+    assert (tmp_path / "registry" / "topics" / "agents.md").exists()
+    assert (tmp_path / "registry" / "tags" / "demo.md").exists()
+    assert (tmp_path / "registry" / "sources" / "pdf.md").exists()
+    assert (tmp_path / "registry" / "timelines" / "2026.md").exists()
 
 
 def test_ingest_text_creates_snapshot_record_for_pasted_content(tmp_path: Path) -> None:
@@ -41,6 +45,10 @@ def test_ingest_text_creates_snapshot_record_for_pasted_content(tmp_path: Path) 
 
     assert result.source_copy_path.read_text(encoding="utf-8") == "hello world"
     assert result.note_path.exists()
+    assert (tmp_path / "registry" / "topics" / "scratch.md").exists()
+    assert (tmp_path / "registry" / "tags" / "capture.md").exists()
+    assert (tmp_path / "registry" / "sources" / "text.md").exists()
+    assert (tmp_path / "registry" / "timelines" / "2026.md").exists()
 
 
 def test_ingest_url_creates_html_snapshot_and_note(
@@ -74,3 +82,7 @@ def test_ingest_url_creates_html_snapshot_and_note(
     )
     assert result.note_path.exists()
     assert result.registry_path.exists()
+    assert (tmp_path / "registry" / "topics" / "web.md").exists()
+    assert (tmp_path / "registry" / "tags" / "demo.md").exists()
+    assert (tmp_path / "registry" / "sources" / "url.md").exists()
+    assert (tmp_path / "registry" / "timelines" / "2026.md").exists()

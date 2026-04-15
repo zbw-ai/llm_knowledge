@@ -9,6 +9,7 @@ from urllib.request import Request, urlopen
 
 from llm_kb.frontmatter import dump_frontmatter
 from llm_kb.models import EntryMetadata
+from llm_kb.registry import update_aggregates
 from llm_kb.slugify import make_entry_id
 
 TYPE_TO_SOURCE_DIR = {
@@ -189,6 +190,7 @@ def _write_note_and_registry(
         "",
     )
     registry_path.write_text(registry_body, encoding="utf-8")
+    update_aggregates(root, registry_path)
 
     return IngestResult(
         entry_id=entry_id,
