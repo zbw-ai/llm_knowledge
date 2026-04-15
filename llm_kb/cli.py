@@ -8,7 +8,7 @@ from llm_kb.retrieve import lookup_entries, trace_entry
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(prog="llm-kb")
+    parser = argparse.ArgumentParser(prog="python -m llm_kb")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     init_parser = subparsers.add_parser("init")
@@ -22,6 +22,11 @@ def main() -> int:
     ingest_file_parser.add_argument("--source-kind", required=True)
     ingest_file_parser.add_argument("--topic", action="append", default=[])
     ingest_file_parser.add_argument("--tag", action="append", default=[])
+    ingest_file_parser.add_argument(
+        "--review",
+        action="store_true",
+        help="强制进入确认模式",
+    )
 
     ingest_text_parser = subparsers.add_parser("ingest-text")
     ingest_text_parser.add_argument("--root", type=Path, default=Path.cwd())
@@ -31,6 +36,11 @@ def main() -> int:
     ingest_text_parser.add_argument("--source-kind", required=True)
     ingest_text_parser.add_argument("--topic", action="append", default=[])
     ingest_text_parser.add_argument("--tag", action="append", default=[])
+    ingest_text_parser.add_argument(
+        "--review",
+        action="store_true",
+        help="强制进入确认模式",
+    )
 
     ingest_url_parser = subparsers.add_parser("ingest-url")
     ingest_url_parser.add_argument("--root", type=Path, default=Path.cwd())
@@ -40,6 +50,11 @@ def main() -> int:
     ingest_url_parser.add_argument("--source-kind", required=True)
     ingest_url_parser.add_argument("--topic", action="append", default=[])
     ingest_url_parser.add_argument("--tag", action="append", default=[])
+    ingest_url_parser.add_argument(
+        "--review",
+        action="store_true",
+        help="强制进入确认模式",
+    )
 
     review_parser = subparsers.add_parser("review-draft")
     review_parser.add_argument("--root", type=Path, default=Path.cwd())
@@ -75,7 +90,7 @@ def main() -> int:
         initialize_workspace(args.root)
         return 0
     if args.command == "ingest-file":
-        ingest_local_file(
+        result = ingest_local_file(
             root=args.root,
             source_path=args.source,
             title=args.title,
@@ -83,10 +98,12 @@ def main() -> int:
             source_kind=args.source_kind,
             topics=args.topic,
             tags=args.tag,
+            review_mode="force" if args.review else "auto",
         )
+        _maybe_print_pending_ingest_result(result)
         return 0
     if args.command == "ingest-text":
-        ingest_text(
+        result = ingest_text(
             root=args.root,
             text=args.text,
             title=args.title,
@@ -94,10 +111,12 @@ def main() -> int:
             source_kind=args.source_kind,
             topics=args.topic,
             tags=args.tag,
+            review_mode="force" if args.review else "auto",
         )
+        _maybe_print_pending_ingest_result(result)
         return 0
     if args.command == "ingest-url":
-        ingest_url(
+        result = ingest_url(
             root=args.root,
             url=args.url,
             title=args.title,
@@ -105,7 +124,9 @@ def main() -> int:
             source_kind=args.source_kind,
             topics=args.topic,
             tags=args.tag,
+            review_mode="force" if args.review else "auto",
         )
+        _maybe_print_pending_ingest_result(result)
         return 0
     if args.command == "review-draft":
         _print_review_result(review_draft(args.root, args.id))
@@ -191,3 +212,14 @@ def _print_revise_result(result) -> None:
 def _print_cancel_result(result) -> None:
     print(f"draft_id: {result.draft_id}")
     print(f"status: {result.status}")
+
+
+def _maybe_print_pending_ingest_result(result) -> None:
+    if getattr(result, "mode", "") != "pending_review":
+        return
+    print(f"draft_id: {result.draft_id}")
+    print(f"draft_path: {result.draft_path}")
+    print(
+        "next: 先运行 `python -m llm_kb review-draft --root <root> --id "
+        f"{result.draft_id}`，再根据需要使用 `confirm-draft`、`revise-draft` 或 `cancel-draft`。"
+    )

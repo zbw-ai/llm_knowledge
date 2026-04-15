@@ -6,6 +6,20 @@
 
 这个仓库实现的是 LLM 知识库的 MVP：先把输入内容标准化为 `atomic` 卡片和 `registry` 条目，再用 `registry` 层做优先检索。它适合本地个人知识管理、研究素材整理、以及给后续的问答/总结流程提供稳定入口。
 
+## 什么是确认模式
+
+确认模式是一层“先落草稿、后转正”的保护网。命中确认模式后，`ingest-*` 不会直接写入正式的 `notes/atomic/` 和 `registry/entries/`，而是先生成 `inbox/pending/drafts/` 下的待确认草稿，并把原始来源放进 `inbox/pending/sources/`。你可以先用 `review-draft` 看内容，再决定要不要 `confirm-draft`、`revise-draft` 或 `cancel-draft`。
+
+### 哪些场景会自动进入确认模式
+
+当前 CLI 采用轻量规则自动判断：
+
+- `paper` 和 `github` 类型默认进入确认模式。
+- 纯文本或网页快照内容过长时会进入确认模式，当前阈值是 5000 个字符。
+- 如果你显式加了 `--review`，一定进入确认模式，不再走自动判断。
+
+如果没有命中上述规则，`ingest-*` 会继续按原来的快速入库路径直接写正式条目。
+
 ## 目录结构
 
 初始化后，仓库会形成下面这些核心目录：
@@ -40,6 +54,8 @@ python -m llm_kb ingest-file --root . --source ./paper.pdf --title "Demo Paper" 
 python -m llm_kb ingest-text --root . --text "..." --title "Demo Note" --type note --source-kind manual
 python -m llm_kb ingest-url --root . --url "https://example.com" --title "Demo URL" --type blog --source-kind web
 ```
+
+如果命中确认模式，命令会先打印 `draft_id` 和 `draft_path`，再提示你下一步先 `review-draft`。
 
 3. 用 `ask` 查找最相关条目，用 `trace` 看来源链路：
 
@@ -91,6 +107,7 @@ python -m llm_kb ingest-file \
 - `--source-kind`：来源类型，例如 `arxiv`、`blog`、`manual`。
 - `--topic`：可重复传入，写入 `topics`。
 - `--tag`：可重复传入，写入 `tags`。
+- `--review`：强制进入确认模式，直接生成待确认草稿。
 
 ### `ingest-text`
 
@@ -106,6 +123,7 @@ python -m llm_kb ingest-text \
 ```
 
 参数与 `ingest-file` 类似，只是把 `--source` 换成了 `--text`。
+- `--review`：强制进入确认模式。
 
 ### `ingest-url`
 
@@ -121,6 +139,45 @@ python -m llm_kb ingest-url \
 ```
 
 当前实现会把抓取到的页面内容存成快照文件，再写入知识库条目。
+- `--review`：强制进入确认模式。
+
+### `review-draft`
+
+查看待确认草稿的摘要、核心论点和元数据。
+
+```bash
+python -m llm_kb review-draft --root /path/to/kb --id draft-2026-04-15-blog-demo-url
+```
+
+### `confirm-draft`
+
+把待确认草稿正式转正，写入 `notes/atomic/`、`registry/entries/` 和对应的来源目录。
+
+```bash
+python -m llm_kb confirm-draft --root /path/to/kb --id draft-2026-04-15-blog-demo-url
+```
+
+### `revise-draft`
+
+在草稿上调整内容类型、主题、标签，或者重新生成摘要。
+
+```bash
+python -m llm_kb revise-draft \
+  --root /path/to/kb \
+  --id draft-2026-04-15-blog-demo-url \
+  --type blog \
+  --topic agents \
+  --tag memory \
+  --regenerate-summary
+```
+
+### `cancel-draft`
+
+取消一份待确认草稿，保留它的历史状态，避免误转正。
+
+```bash
+python -m llm_kb cancel-draft --root /path/to/kb --id draft-2026-04-15-blog-demo-url
+```
 
 ### `ask`
 
@@ -146,6 +203,8 @@ python -m llm_kb trace --root /path/to/kb --id paper-2026-04-demo-paper
 参数：
 
 - `--id`：registry 条目 ID。
+
+如果你刚刚走过确认模式，`trace` 要填的是 `confirm-draft` 之后生成的正式 `entry_id`，不是 `draft_id`。
 
 ## MVP 明确不做什么
 
