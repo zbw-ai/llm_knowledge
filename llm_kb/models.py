@@ -20,3 +20,23 @@ class EntryMetadata:
     def to_dict(self) -> dict:
         return asdict(self)
 
+
+@dataclass
+class PendingDraftMetadata:
+    draft_id: str
+    status: str
+    source_input: str
+    source_kind: str
+    content_type: str
+    title: str
+    created_at: str
+    pending_source_paths: list[str] = field(default_factory=list)
+    suggested_topics: list[str] = field(default_factory=list)
+    suggested_tags: list[str] = field(default_factory=list)
+    proposed_entry_id: str = ""
+    proposed_note_path: str = ""
+    proposed_registry_path: str = ""
+    preserve_source: bool = True
+
+    def to_dict(self) -> dict:
+        return asdict(self)
