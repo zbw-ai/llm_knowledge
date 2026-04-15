@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from llm_kb.bootstrap import initialize_workspace
-from llm_kb.ingest import ingest_local_file, ingest_text
+from llm_kb.ingest import ingest_local_file, ingest_text, ingest_url
 
 
 def test_ingest_local_file_creates_source_note_and_registry(tmp_path: Path) -> None:
@@ -41,3 +41,36 @@ def test_ingest_text_creates_snapshot_record_for_pasted_content(tmp_path: Path) 
 
     assert result.source_copy_path.read_text(encoding="utf-8") == "hello world"
     assert result.note_path.exists()
+
+
+def test_ingest_url_creates_html_snapshot_and_note(
+    tmp_path: Path, monkeypatch
+) -> None:
+    initialize_workspace(tmp_path)
+
+    calls: list[str] = []
+
+    def fake_fetch_url_text(url: str) -> str:
+        calls.append(url)
+        return "<html><body>demo page</body></html>"
+
+    monkeypatch.setattr("llm_kb.ingest.fetch_url_text", fake_fetch_url_text)
+
+    result = ingest_url(
+        root=tmp_path,
+        url="https://example.com/demo",
+        title="Web Demo",
+        content_type="blog",
+        source_kind="url",
+        topics=["web"],
+        tags=["demo"],
+    )
+
+    assert calls == ["https://example.com/demo"]
+    assert result.source_copy_path.suffix == ".html"
+    assert result.source_copy_path.parent == tmp_path / "sources" / "blogs"
+    assert result.source_copy_path.read_text(encoding="utf-8") == (
+        "<html><body>demo page</body></html>"
+    )
+    assert result.note_path.exists()
+    assert result.registry_path.exists()

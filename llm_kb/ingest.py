@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 import shutil
+from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 from llm_kb.frontmatter import dump_frontmatter
 from llm_kb.models import EntryMetadata
@@ -25,6 +27,21 @@ class IngestResult:
     note_path: Path
     registry_path: Path
     source_copy_path: Path
+
+
+def fetch_url_text(url: str) -> str:
+    request = Request(url, headers={"User-Agent": "llm-kb/0.1"})
+    try:
+        with urlopen(request, timeout=30) as response:
+            raw = response.read()
+            charset = response.headers.get_content_charset() or "utf-8"
+    except (URLError, OSError) as exc:
+        raise RuntimeError(f"Failed to fetch URL snapshot for {url}: {exc}") from exc
+
+    try:
+        return raw.decode(charset, errors="replace")
+    except LookupError:
+        return raw.decode("utf-8", errors="replace")
 
 
 def ingest_local_file(
@@ -82,6 +99,35 @@ def ingest_text(
     )
 
 
+def ingest_url(
+    root: Path,
+    url: str,
+    title: str,
+    content_type: str,
+    source_kind: str,
+    topics: list[str],
+    tags: list[str],
+) -> IngestResult:
+    created_at = date.today().isoformat()
+    entry_id = make_entry_id(content_type, created_at, title)
+    snapshot_text = fetch_url_text(url)
+    source_copy_path = root / TYPE_TO_SOURCE_DIR[content_type] / f"{entry_id}.html"
+    source_copy_path.parent.mkdir(parents=True, exist_ok=True)
+    source_copy_path.write_text(snapshot_text, encoding="utf-8")
+    return _write_note_and_registry(
+        root=root,
+        entry_id=entry_id,
+        title=title,
+        content_type=content_type,
+        source_kind=source_kind,
+        created_at=created_at,
+        source_path=source_copy_path,
+        topics=topics,
+        tags=tags,
+        source_url=url,
+    )
+
+
 def _write_note_and_registry(
     root: Path,
     entry_id: str,
@@ -92,6 +138,7 @@ def _write_note_and_registry(
     source_path: Path,
     topics: list[str],
     tags: list[str],
+    source_url: str | None = None,
 ) -> IngestResult:
     note_path = root / "notes" / "atomic" / f"{entry_id}.md"
     note_path.parent.mkdir(parents=True, exist_ok=True)
@@ -106,6 +153,7 @@ def _write_note_and_registry(
         created_at=created_at,
         topics=topics,
         tags=tags,
+        source_url=source_url,
         local_source_paths=[str(source_path.resolve())],
     )
     note_body = (
@@ -135,6 +183,7 @@ def _write_note_and_registry(
             "created_at": created_at,
             "card_path": str(note_path.resolve()),
             "source_paths": [str(source_path.resolve())],
+            "source_url": source_url,
             "summary": "TBD",
         },
         "",
