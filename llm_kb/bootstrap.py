@@ -4,6 +4,8 @@ from pathlib import Path
 DEFAULT_DIRS = [
     "inbox/links",
     "inbox/files",
+    "inbox/pending/drafts",
+    "inbox/pending/sources",
     "sources/papers",
     "sources/blogs",
     "sources/social",
@@ -26,6 +28,7 @@ DEFAULT_TEMPLATES = {
     "topic-note.md": "# Topic Overview\n\n# Key Entries\n\n# Open Questions\n",
     "synthesis-note.md": "# Scope\n\n# Synthesis\n\n# Tensions\n\n# Next Steps\n",
     "source-record.md": "---\nsource_url: \nsource_kind: \n---\n",
+    "pending-draft.md": "---\ndraft_id: \"\"\nstatus: pending_review\nsource_input: \"\"\nsource_kind: \"\"\ncontent_type: \"\"\ntitle: \"\"\ncreated_at: \"\"\npending_source_paths: []\nsuggested_topics: []\nsuggested_tags: []\nproposed_entry_id: \"\"\nproposed_note_path: \"\"\nproposed_registry_path: \"\"\npreserve_source: true\n---\n\n# Summary\n\n# Core Claims\n\n# Review Actions\n\n- confirm\n- regenerate_summary\n- update_tags\n- change_type\n- cancel\n",
 }
 
 

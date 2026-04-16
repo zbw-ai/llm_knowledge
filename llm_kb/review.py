@@ -4,6 +4,7 @@ import shutil
 
 from llm_kb.frontmatter import dump_frontmatter, load_frontmatter
 from llm_kb.models import EntryMetadata, PendingDraftMetadata
+from llm_kb.registry import update_aggregates
 from llm_kb.slugify import make_entry_id, slugify
 
 
@@ -44,11 +45,10 @@ def should_require_review(
     text_length: int,
     force_review: bool,
 ) -> bool:
+    del source_kind
     if force_review:
         return True
     if content_type in {"paper", "github"}:
-        return True
-    if source_kind in {"paper", "github"}:
         return True
     return text_length > REVIEW_TEXT_LENGTH_THRESHOLD
 
@@ -121,7 +121,7 @@ def _build_draft_body(summary: str, core_claims: list[str]) -> str:
     if core_claims:
         lines.extend(f"- {claim}" for claim in core_claims)
     else:
-        lines.append("-")
+        lines.append("- TBD")
     lines.extend(
         [
             "",
@@ -142,7 +142,7 @@ def _build_atomic_note_body(summary: str, core_claims: list[str], source_paths: 
     lines = [
         "# Summary",
         "",
-        summary.strip(),
+        summary.strip() or "TBD",
         "",
         "# Core Claims",
         "",
@@ -150,7 +150,7 @@ def _build_atomic_note_body(summary: str, core_claims: list[str], source_paths: 
     if core_claims:
         lines.extend(f"- {claim}" for claim in core_claims)
     else:
-        lines.append("-")
+        lines.append("- TBD")
     lines.extend(
         [
             "",
@@ -161,42 +161,24 @@ def _build_atomic_note_body(summary: str, core_claims: list[str], source_paths: 
     if source_paths:
         lines.extend(f"- {path}" for path in source_paths)
     else:
-        lines.append("-")
+        lines.append("- TBD")
     lines.extend(
         [
             "",
             "# Relevance",
             "",
-            "- Confirmed from a pending draft.",
+            "Confirmed from a pending draft.",
             "",
             "# My Thoughts",
             "",
-            "-",
+            "TBD",
             "",
             "# Follow-ups",
             "",
-            "-",
+            "- TBD",
             "",
         ]
     )
-    return "\n".join(lines)
-
-
-def _build_registry_body(note_path: Path, source_paths: list[Path], summary: str) -> str:
-    lines = [
-        "# Registry Entry",
-        "",
-        f"- note: {note_path}",
-        f"- summary: {summary.strip()}",
-        "",
-        "# Sources",
-        "",
-    ]
-    if source_paths:
-        lines.extend(f"- {path}" for path in source_paths)
-    else:
-        lines.append("-")
-    lines.append("")
     return "\n".join(lines)
 
 
@@ -215,47 +197,6 @@ def _resolve_path(root: Path, path_text: str) -> Path:
     if candidate.is_absolute():
         return candidate
     return Path(root).resolve() / candidate
-
-
-def _append_index_entry(path: Path, heading: str, entry_line: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        text = path.read_text(encoding="utf-8")
-        if entry_line in text:
-            return
-        body = text.rstrip()
-        if body:
-            body += "\n"
-        body += f"{entry_line}\n"
-    else:
-        body = f"# {heading}\n\n{entry_line}\n"
-    path.write_text(body, encoding="utf-8")
-
-
-def _update_aggregates(root: Path, metadata: PendingDraftMetadata, entry_id: str) -> None:
-    link = f"- [{metadata.title}](../entries/{entry_id}.md)"
-    for topic in metadata.suggested_topics:
-        _append_index_entry(
-            root / "registry" / "topics" / f"{slugify(topic)}.md",
-            f"Topic: {topic}",
-            link,
-        )
-    for tag in metadata.suggested_tags:
-        _append_index_entry(
-            root / "registry" / "tags" / f"{slugify(tag)}.md",
-            f"Tag: {tag}",
-            link,
-        )
-    _append_index_entry(
-        root / "registry" / "sources" / f"{slugify(metadata.source_kind)}.md",
-        f"Source: {metadata.source_kind}",
-        link,
-    )
-    _append_index_entry(
-        root / "registry" / "timelines" / f"{metadata.created_at.split('-')[0]}.md",
-        f"Timeline: {metadata.created_at.split('-')[0]}",
-        link,
-    )
 
 
 def _regenerate_body(metadata: PendingDraftMetadata) -> tuple[str, list[str]]:
@@ -308,7 +249,6 @@ def create_pending_draft(
         proposed_registry_path=str(proposed_registry_path),
         preserve_source=preserve_source,
     )
-
     draft_path = _draft_path(root, draft_id)
     draft_path.parent.mkdir(parents=True, exist_ok=True)
     draft_path.write_text(
@@ -351,7 +291,7 @@ def confirm_draft(root: Path, draft_id: str) -> ConfirmDraftResult:
             shutil.copy2(pending_path, final_path)
         else:
             shutil.move(str(pending_path), final_path)
-        source_paths.append(final_path)
+        source_paths.append(final_path.resolve())
 
     note_path = root / "notes" / "atomic" / f"{entry_id}.md"
     note_path.parent.mkdir(parents=True, exist_ok=True)
@@ -363,11 +303,18 @@ def confirm_draft(root: Path, draft_id: str) -> ConfirmDraftResult:
         created_at=metadata.created_at,
         topics=metadata.suggested_topics,
         tags=metadata.suggested_tags,
-        source_url=metadata.source_input if metadata.source_input.startswith(("http://", "https://")) else None,
+        source_url=(
+            metadata.source_input
+            if metadata.source_input.startswith(("http://", "https://"))
+            else None
+        ),
         local_source_paths=[str(path) for path in source_paths],
     )
     note_path.write_text(
-        dump_frontmatter(note_metadata.to_dict(), _build_atomic_note_body(summary, core_claims, source_paths)),
+        dump_frontmatter(
+            note_metadata.to_dict(),
+            _build_atomic_note_body(summary, core_claims, source_paths),
+        ),
         encoding="utf-8",
     )
 
@@ -381,23 +328,25 @@ def confirm_draft(root: Path, draft_id: str) -> ConfirmDraftResult:
         "created_at": metadata.created_at,
         "topics": metadata.suggested_topics,
         "tags": metadata.suggested_tags,
-        "card_path": str(note_path),
+        "card_path": str(note_path.resolve()),
         "source_paths": [str(path) for path in source_paths],
-        "summary": summary,
+        "source_url": (
+            metadata.source_input
+            if metadata.source_input.startswith(("http://", "https://"))
+            else None
+        ),
+        "summary": summary or "TBD",
     }
     registry_path.write_text(
-        dump_frontmatter(
-            registry_metadata,
-            _build_registry_body(note_path, source_paths, summary),
-        ),
+        dump_frontmatter(registry_metadata, ""),
         encoding="utf-8",
     )
-    _update_aggregates(root, metadata, entry_id)
+    update_aggregates(root, registry_path)
 
     metadata.status = "confirmed"
     metadata.proposed_entry_id = entry_id
-    metadata.proposed_note_path = str(note_path)
-    metadata.proposed_registry_path = str(registry_path)
+    metadata.proposed_note_path = str(note_path.resolve())
+    metadata.proposed_registry_path = str(registry_path.resolve())
     _save_draft(draft_path, metadata, body)
 
     return ConfirmDraftResult(
@@ -427,6 +376,7 @@ def revise_draft(
     tags: list[str] | None = None,
     regenerate_summary: bool = False,
 ) -> PendingDraftMetadata:
+    root = Path(root).resolve()
     draft_path, metadata, body = _load_draft(root, draft_id)
     _ensure_pending(metadata)
 
@@ -434,8 +384,12 @@ def revise_draft(
         metadata.content_type = content_type
         entry_id = make_entry_id(metadata.content_type, metadata.created_at, metadata.title)
         metadata.proposed_entry_id = entry_id
-        metadata.proposed_note_path = str(root / "notes" / "atomic" / f"{entry_id}.md")
-        metadata.proposed_registry_path = str(root / "registry" / "entries" / f"{entry_id}.md")
+        metadata.proposed_note_path = str(
+            (root / "notes" / "atomic" / f"{entry_id}.md").resolve()
+        )
+        metadata.proposed_registry_path = str(
+            (root / "registry" / "entries" / f"{entry_id}.md").resolve()
+        )
 
     if topics is not None:
         metadata.suggested_topics = topics

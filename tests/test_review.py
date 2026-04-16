@@ -203,10 +203,10 @@ def test_revise_draft_recomputes_type_paths_and_tags(tmp_path: Path) -> None:
         "Demo Paper",
     )
     assert draft_metadata["proposed_note_path"] == str(
-        tmp_path / "notes" / "atomic" / "blog-2026-04-demo-paper.md"
+        (tmp_path / "notes" / "atomic" / "blog-2026-04-demo-paper.md").resolve()
     )
     assert draft_metadata["proposed_registry_path"] == str(
-        tmp_path / "registry" / "entries" / "blog-2026-04-demo-paper.md"
+        (tmp_path / "registry" / "entries" / "blog-2026-04-demo-paper.md").resolve()
     )
     assert draft_metadata["suggested_tags"] == ["evaluation"]
     assert draft_metadata["suggested_topics"] == ["memory"]
